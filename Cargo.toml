@@ -6,4 +6,3 @@ edition = "2021"
 [dependencies]
 jni = { version = "0.20.0" }
 ndk-context = "0.1.1"
-once_cell = "1.17.0"

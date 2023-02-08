@@ -9,6 +9,8 @@ crate_type=["lib", "cdylib"]
 [dependencies]
 android-activity = { version = "0.4.0", features = ["native-activity"] }
 android-intent = { path = "../" }
+jni = { version = "0.20.0" }
+ndk-context = "0.1.1"
 
 [package.metadata.android.sdk]
-min_sdk_version = 31
+min_sdk_version = 21

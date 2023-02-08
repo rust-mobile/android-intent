@@ -1,37 +1,56 @@
 use jni::{
     objects::{JObject, JString},
-    AttachGuard, JavaVM,
+    JNIEnv, JavaVM,
 };
 
-pub fn current_vm() -> JavaVM {
-    let cx = ndk_context::android_context();
-    unsafe { JavaVM::from_raw(cx.vm().cast()) }.unwrap()
-}
-
 pub enum Action {
-    View,
+    Send,
     Edit,
 }
 
 impl AsRef<str> for Action {
     fn as_ref(&self) -> &str {
         match self {
-            Self::View => "ACTION_VIEW",
+            Self::Send => "ACTION_SEND",
             Self::Edit => "ACTION_EDIT",
         }
     }
 }
 
+pub enum Extra {
+    Text,
+}
+
+impl AsRef<str> for Extra {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Text => "android.intent.extra.TEXT",
+        }
+    }
+}
+
+pub fn with_current_env(f: impl FnOnce(JNIEnv)) {
+    let cx = ndk_context::android_context();
+    let vm = unsafe { JavaVM::from_raw(cx.vm().cast()) }.unwrap();
+    let env = vm.attach_current_thread().unwrap();
+
+    f(env.clone());
+
+    drop(env);
+}
+
 #[must_use]
 pub struct Intent<'env> {
-    env: AttachGuard<'env>,
-    object: JObject<'env>,
+    pub env: JNIEnv<'env>,
+    pub object: JObject<'env>,
 }
 
 impl<'env> Intent<'env> {
-    pub fn new(vm: &'env JavaVM, action: impl AsRef<str>) -> Self {
-        let env = vm.attach_current_thread().unwrap();
+    pub fn from_object(env: JNIEnv<'env>, object: JObject<'env>) -> Self {
+        Self { env, object }
+    }
 
+    pub fn new(env: JNIEnv<'env>, action: impl AsRef<str>) -> Self {
         let intent_class = env.find_class("android/content/Intent").unwrap();
         let action_view = env
             .get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")
@@ -41,15 +60,10 @@ impl<'env> Intent<'env> {
             .new_object(intent_class, "(Ljava/lang/String;)V", &[action_view.into()])
             .unwrap();
 
-        Self {
-            env,
-            object: intent,
-        }
+        Self::from_object(env, intent)
     }
 
-    pub fn new_with_uri(vm: &'env JavaVM, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
-        let env = vm.attach_current_thread().unwrap();
-
+    pub fn new_with_uri(env: JNIEnv<'env>, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
         let url_string = env.new_string(uri).unwrap();
         let uri_class = env.find_class("android/net/Uri").unwrap();
         let uri = env
@@ -74,10 +88,7 @@ impl<'env> Intent<'env> {
             )
             .unwrap();
 
-        Self {
-            env,
-            object: intent,
-        }
+        Self::from_object(env, intent)
     }
 
     pub fn push_extra(&self, key: impl AsRef<str>, value: impl AsRef<str>) {
@@ -99,26 +110,14 @@ impl<'env> Intent<'env> {
         self
     }
 
-    pub fn set_chooser(&mut self, title: impl AsRef<str>) -> &mut Self {
-        let jstring = self.env.new_string(title).unwrap();
-
-        let intent_class = self.env.find_class("android/content/Intent").unwrap();
-        let intent = self
-            .env
-            .call_static_method(
-                intent_class,
-                "createChooser",
-                "(Ljava/lang/String;Landroid/net/Uri;)V",
-                &[self.object.into(), jstring.into()],
-            )
-            .unwrap();
-
-        self.object = intent.try_into().unwrap();
-        self
+    pub fn create_chooser(&self) -> Self {
+        self.create_chooser_with_title(None::<&str>)
     }
 
-    pub fn into_chooser(&mut self, title: impl AsRef<str>) -> &mut Self {
-        let jstring = self.env.new_string(title).unwrap();
+    pub fn create_chooser_with_title(&self, title: Option<impl AsRef<str>>) -> Self {
+        let title_value = title
+            .map(|s| self.env.new_string(s).unwrap().into())
+            .unwrap_or_else(|| JObject::null().into());
 
         let intent_class = self.env.find_class("android/content/Intent").unwrap();
         let intent = self
@@ -126,13 +125,12 @@ impl<'env> Intent<'env> {
             .call_static_method(
                 intent_class,
                 "createChooser",
-                "(Ljava/lang/String;Landroid/net/Uri;)V",
-                &[self.object.into(), jstring.into()],
+                "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;",
+                &[self.object.into(), title_value],
             )
             .unwrap();
 
-        self.object = intent.try_into().unwrap();
-        self
+        Self::from_object(self.env, intent.try_into().unwrap())
     }
 
     pub fn set_type(&self, type_name: impl AsRef<str>) {
