@@ -2,6 +2,9 @@
 name = "android-intent"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/concoct-rs/android-intent-rs"
+license = "MIT"
+description = "Android intent utilities"
 
 [dependencies]
 jni = { version = "0.20.0" }
