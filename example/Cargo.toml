@@ -1,0 +1,14 @@
+[package]
+name = "intent-example"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate_type=["lib", "cdylib"]
+
+[dependencies]
+android-activity = { version = "0.4.0", features = ["native-activity"] }
+android-intent = { path = "../" }
+
+[package.metadata.android.sdk]
+min_sdk_version = 31
