@@ -1,59 +1,74 @@
 use jni::{
+    errors::Error,
     objects::{JObject, JString},
     JNIEnv,
 };
 
+struct Inner<'env> {
+    env: JNIEnv<'env>,
+    object: JObject<'env>,
+}
+
 /// A messaging object you can use to request an action from another android app component.
 #[must_use]
 pub struct Intent<'env> {
-    pub env: JNIEnv<'env>,
-    pub object: JObject<'env>,
+    inner: Result<Inner<'env>, Error>,
 }
 
 impl<'env> Intent<'env> {
     pub fn from_object(env: JNIEnv<'env>, object: JObject<'env>) -> Self {
-        Self { env, object }
+        Self {
+            inner: Ok(Inner { env, object }),
+        }
+    }
+
+    fn from_fn(f: impl FnOnce() -> Result<Inner<'env>, Error>) -> Self {
+        let inner = f();
+        Self { inner }
     }
 
     pub fn new(env: JNIEnv<'env>, action: impl AsRef<str>) -> Self {
-        let intent_class = env.find_class("android/content/Intent").unwrap();
-        let action_view = env
-            .get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")
-            .unwrap();
+        Self::from_fn(|| {
+            let intent_class = env.find_class("android/content/Intent")?;
+            let action_view =
+                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
 
-        let intent = env
-            .new_object(intent_class, "(Ljava/lang/String;)V", &[action_view.into()])
-            .unwrap();
+            let intent =
+                env.new_object(intent_class, "(Ljava/lang/String;)V", &[action_view.into()])?;
 
-        Self::from_object(env, intent)
+            Ok(Inner {
+                env,
+                object: intent,
+            })
+        })
     }
 
     pub fn new_with_uri(env: JNIEnv<'env>, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
-        let url_string = env.new_string(uri).unwrap();
-        let uri_class = env.find_class("android/net/Uri").unwrap();
-        let uri = env
-            .call_static_method(
+        Self::from_fn(|| {
+            let url_string = env.new_string(uri)?;
+            let uri_class = env.find_class("android/net/Uri")?;
+            let uri = env.call_static_method(
                 uri_class,
                 "parse",
                 "(Ljava/lang/String;)Landroid/net/Uri;",
                 &[JString::from(url_string).into()],
-            )
-            .unwrap();
+            )?;
 
-        let intent_class = env.find_class("android/content/Intent").unwrap();
-        let action_view = env
-            .get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")
-            .unwrap();
+            let intent_class = env.find_class("android/content/Intent")?;
+            let action_view =
+                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
 
-        let intent = env
-            .new_object(
+            let intent = env.new_object(
                 intent_class,
                 "(Ljava/lang/String;Landroid/net/Uri;)V",
                 &[action_view.into(), uri.into()],
-            )
-            .unwrap();
+            )?;
 
-        Self::from_object(env, intent)
+            Ok(Inner {
+                env,
+                object: intent,
+            })
+        })
     }
 
     /// Add extended data to the intent.
@@ -65,23 +80,20 @@ impl<'env> Intent<'env> {
     /// intent.push_extra(Extra::Text, "Hello World!")
     /// # })
     /// ```
-    pub fn push_extra(&self, key: impl AsRef<str>, value: impl AsRef<str>) {
-        let key = self.env.new_string(key).unwrap();
-        let value = self.env.new_string(value).unwrap();
+    pub fn with_extra(self, key: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.and_then(|inner| {
+            let key = inner.env.new_string(key)?;
+            let value = inner.env.new_string(value)?;
 
-        self.env
-            .call_method(
-                self.object,
+            inner.env.call_method(
+                inner.object,
                 "putExtra",
                 "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
                 &[key.into(), value.into()],
-            )
-            .unwrap();
-    }
+            )?;
 
-    pub fn with_extra(&self, key: impl AsRef<str>, value: impl AsRef<str>) -> &Self {
-        self.push_extra(key, value);
-        self
+            Ok(inner)
+        })
     }
 
     /// Builds a new [`Action::Chooser`](Action) Intent that wraps the given target intent.
@@ -89,31 +101,33 @@ impl<'env> Intent<'env> {
     /// use android_intent::{Action, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send);
-    /// let chooser_intent = intent.create_chooser();
+    /// let intent = Intent::new(env, Action::Send).into_chhoser();
     /// # })
     /// ```
-    pub fn create_chooser(&self) -> Self {
-        self.create_chooser_with_title(None::<&str>)
+    pub fn into_chooser(self) -> Self {
+        self.into_chooser_with_title(None::<&str>)
     }
 
-    pub fn create_chooser_with_title(&self, title: Option<impl AsRef<str>>) -> Self {
-        let title_value = title
-            .map(|s| self.env.new_string(s).unwrap().into())
-            .unwrap_or_else(|| JObject::null().into());
+    pub fn into_chooser_with_title(self, title: Option<impl AsRef<str>>) -> Self {
+        self.and_then(|mut inner| {
+            let title_value = if let Some(title) = title {
+                let s = inner.env.new_string(title)?;
+                s.into()
+            } else {
+                JObject::null().into()
+            };
 
-        let intent_class = self.env.find_class("android/content/Intent").unwrap();
-        let intent = self
-            .env
-            .call_static_method(
+            let intent_class = inner.env.find_class("android/content/Intent")?;
+            let intent = inner.env.call_static_method(
                 intent_class,
                 "createChooser",
                 "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;",
-                &[self.object.into(), title_value],
-            )
-            .unwrap();
+                &[inner.object.into(), title_value],
+            )?;
 
-        Self::from_object(self.env, intent.try_into().unwrap())
+            inner.object = intent.try_into()?;
+            Ok(inner)
+        })
     }
 
     /// Set an explicit MIME data type.
@@ -125,35 +139,39 @@ impl<'env> Intent<'env> {
     /// intent.set_type("text/plain");
     /// # })
     /// ```
-    pub fn set_type(&self, type_name: impl AsRef<str>) {
-        let jstring = self.env.new_string(type_name).unwrap();
+    pub fn with_type(self, type_name: impl AsRef<str>) -> Self {
+        self.and_then(|inner| {
+            let jstring = inner.env.new_string(type_name)?;
 
-        self.env
-            .call_method(
-                self.object,
+            inner.env.call_method(
+                inner.object,
                 "setType",
                 "(Ljava/lang/String;)Landroid/content/Intent;",
                 &[jstring.into()],
-            )
-            .unwrap();
+            )?;
+
+            Ok(inner)
+        })
     }
 
-    pub fn with_type(&self, type_name: impl AsRef<str>) -> &Self {
-        self.set_type(type_name);
-        self
-    }
-
-    pub fn start_activity(&self) {
+    pub fn start_activity(self) -> Result<(), Error> {
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
-        self.env
-            .call_method(
+        self.inner.and_then(|inner| {
+            inner.env.call_method(
                 activity,
                 "startActivity",
                 "(Landroid/content/Intent;)V",
-                &[self.object.into()],
-            )
-            .unwrap();
+                &[inner.object.into()],
+            )?;
+
+            Ok(())
+        })
+    }
+
+    fn and_then(mut self, f: impl FnOnce(Inner) -> Result<Inner, Error>) -> Self {
+        self.inner = self.inner.and_then(f);
+        self
     }
 }

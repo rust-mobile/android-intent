@@ -13,10 +13,9 @@ fn android_main(_android_app: AndroidApp) {
         Intent::new(env, Action::Send)
             .with_type("text/plain")
             .with_extra(Extra::Text, "Hello World!")
-            .create_chooser()
+            .into_chooser()
             .start_activity()
+            .unwrap()
     });
-
-    loop {}
 }
 ```
