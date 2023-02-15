@@ -96,7 +96,7 @@ impl<'env> Intent<'env> {
         })
     }
 
-    /// Builds a new [`Action::Chooser`](Action) Intent that wraps the given target intent.
+    /// Builds a new [`Action::Chooser`] Intent that wraps the given target intent.
     /// ```no_run
     /// use android_intent::{Action, Intent};
     ///
