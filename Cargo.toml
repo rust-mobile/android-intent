@@ -1,11 +1,11 @@
 [package]
 name = "android-intent"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
-repository = "https://github.com/concoct-rs/android-intent-rs"
+repository = "https://github.com/rust-mobile/android-intent"
 license = "MIT"
 description = "Android intent utilities"
 
 [dependencies]
-jni = { version = "0.20.0" }
+jni = "0.20.0"
 ndk-context = "0.1.1"
