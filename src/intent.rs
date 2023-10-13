@@ -71,6 +71,31 @@ impl<'env> Intent<'env> {
         })
     }
 
+    /// Set the class name for the intent target.
+    /// ```no_run
+    /// use android_intent::{Action, Extra, Intent};
+    ///
+    /// # android_intent::with_current_env(|env| {
+    /// let intent = Intent::new(env, Action::Send);
+    /// intent.set_class_name("com.excample", "IntentTarget")
+    /// # })
+    /// ```
+    pub fn set_class_name(self, package_name: impl AsRef<str>, class_name: impl AsRef<str>) -> Self {
+        self.and_then(|inner| {
+            let package_name = inner.env.new_string(package_name)?;
+            let class_name = inner.env.new_string(class_name)?;
+
+            inner.env.call_method(
+                inner.object,
+                "setClassName",
+                "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+                &[package_name.into(), class_name.into()],
+            )?;
+
+            Ok(inner)
+        })
+    }
+
     /// Add extended data to the intent.
     /// ```no_run
     /// use android_intent::{Action, Extra, Intent};
