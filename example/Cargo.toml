@@ -7,9 +7,9 @@ edition = "2021"
 crate_type=["lib", "cdylib"]
 
 [dependencies]
-android-activity = { version = "0.4.0", features = ["native-activity"] }
+android-activity = { version = "0.6.0", features = ["native-activity"] }
 android-intent = { path = "../" }
-jni = { version = "0.20.0" }
+jni = { version = "0.21" }
 ndk-context = "0.1.1"
 
 [package.metadata.android.sdk]
