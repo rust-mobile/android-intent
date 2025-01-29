@@ -71,8 +71,8 @@ impl<'env> Intent<'env> {
     /// use android_intent::{Action, Extra, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send);
-    /// let intent = intent.set_class_name("com.excample", "IntentTarget");
+    /// let intent = Intent::new(env, Action::Send)
+    ///     .set_class_name("com.excample", "IntentTarget");
     /// # })
     /// ```
     pub fn set_class_name(
@@ -100,8 +100,8 @@ impl<'env> Intent<'env> {
     /// use android_intent::{Action, Extra, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send);
-    /// let intent = intent.with_extra(Extra::Text, "Hello World!");
+    /// let intent = Intent::new(env, Action::Send)
+    ///     .with_extra(Extra::Text, "Hello World!");
     /// # })
     /// ```
     pub fn with_extra(self, key: impl AsRef<str>, value: impl AsRef<str>) -> Self {
@@ -125,7 +125,8 @@ impl<'env> Intent<'env> {
     /// use android_intent::{Action, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send).into_chooser();
+    /// let intent = Intent::new(env, Action::Send)
+    ///     .into_chooser();
     /// # })
     /// ```
     pub fn into_chooser(self) -> Self {
@@ -159,8 +160,8 @@ impl<'env> Intent<'env> {
     /// use android_intent::{Action, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send);
-    /// let intent = intent.with_type("text/plain");
+    /// let intent = Intent::new(env, Action::Send)
+    ///     .with_type("text/plain");
     /// # })
     /// ```
     pub fn with_type(self, type_name: impl AsRef<str>) -> Self {
