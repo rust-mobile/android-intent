@@ -11,6 +11,4 @@ fn android_main(_android_app: AndroidApp) {
             .start_activity()
             .unwrap()
     });
-
-    loop {}
 }
