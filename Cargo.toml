@@ -7,7 +7,7 @@ license = "MIT"
 description = "Android intent utilities"
 
 [dependencies]
-jni = "0.20.0"
+jni = "0.21.1"
 ndk-context = "0.1.1"
 
 [workspace]
