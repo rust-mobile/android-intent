@@ -9,3 +9,8 @@ description = "Android intent utilities"
 [dependencies]
 jni = "0.20.0"
 ndk-context = "0.1.1"
+
+[workspace]
+members = [
+  "example"
+]
