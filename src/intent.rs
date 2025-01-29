@@ -1,8 +1,4 @@
-use jni::{
-    errors::Error,
-    objects::{JObject, JString},
-    JNIEnv,
-};
+use jni::{errors::Error, objects::JObject, JNIEnv};
 
 struct Inner<'env> {
     env: JNIEnv<'env>,
@@ -33,8 +29,7 @@ impl<'env> Intent<'env> {
             let action_view =
                 env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
 
-            let intent =
-                env.new_object(intent_class, "(Ljava/lang/String;)V", &[action_view.into()])?;
+            let intent = env.new_object(intent_class, "(Ljava/lang/String;)V", &[action_view])?;
 
             Ok(Inner {
                 env,
@@ -51,7 +46,7 @@ impl<'env> Intent<'env> {
                 uri_class,
                 "parse",
                 "(Ljava/lang/String;)Landroid/net/Uri;",
-                &[JString::from(url_string).into()],
+                &[url_string.into()],
             )?;
 
             let intent_class = env.find_class("android/content/Intent")?;
@@ -61,7 +56,7 @@ impl<'env> Intent<'env> {
             let intent = env.new_object(
                 intent_class,
                 "(Ljava/lang/String;Landroid/net/Uri;)V",
-                &[action_view.into(), uri.into()],
+                &[action_view, uri],
             )?;
 
             Ok(Inner {
@@ -77,10 +72,14 @@ impl<'env> Intent<'env> {
     ///
     /// # android_intent::with_current_env(|env| {
     /// let intent = Intent::new(env, Action::Send);
-    /// intent.set_class_name("com.excample", "IntentTarget")
+    /// let intent = intent.set_class_name("com.excample", "IntentTarget");
     /// # })
     /// ```
-    pub fn set_class_name(self, package_name: impl AsRef<str>, class_name: impl AsRef<str>) -> Self {
+    pub fn set_class_name(
+        self,
+        package_name: impl AsRef<str>,
+        class_name: impl AsRef<str>,
+    ) -> Self {
         self.and_then(|inner| {
             let package_name = inner.env.new_string(package_name)?;
             let class_name = inner.env.new_string(class_name)?;
@@ -102,7 +101,7 @@ impl<'env> Intent<'env> {
     ///
     /// # android_intent::with_current_env(|env| {
     /// let intent = Intent::new(env, Action::Send);
-    /// intent.push_extra(Extra::Text, "Hello World!")
+    /// let intent = intent.with_extra(Extra::Text, "Hello World!");
     /// # })
     /// ```
     pub fn with_extra(self, key: impl AsRef<str>, value: impl AsRef<str>) -> Self {
@@ -121,12 +120,12 @@ impl<'env> Intent<'env> {
         })
     }
 
-    /// Builds a new [`Action::Chooser`] Intent that wraps the given target intent.
+    /// Builds a new [`super::Action::Chooser`] Intent that wraps the given target intent.
     /// ```no_run
     /// use android_intent::{Action, Intent};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send).into_chhoser();
+    /// let intent = Intent::new(env, Action::Send).into_chooser();
     /// # })
     /// ```
     pub fn into_chooser(self) -> Self {
@@ -161,7 +160,7 @@ impl<'env> Intent<'env> {
     ///
     /// # android_intent::with_current_env(|env| {
     /// let intent = Intent::new(env, Action::Send);
-    /// intent.set_type("text/plain");
+    /// let intent = intent.with_type("text/plain");
     /// # })
     /// ```
     pub fn with_type(self, type_name: impl AsRef<str>) -> Self {

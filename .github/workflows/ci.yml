@@ -1,0 +1,36 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    name: Lint Rust code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add aarch64-linux-android
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets --target aarch64-linux-android -- -D warnings
+      - name: Cargo build-test docs
+        # Must build _for_ the host as --target makes this a no-op
+        run: cargo test --doc
+      - name: Test documentation
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        run: cargo doc --workspace --target aarch64-linux-android
+
+  rust-msrv:
+    name: Build-test MSRV (1.80) with minimal crate dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Generate minimal-version dependencies
+        run: cargo -Zminimal-versions generate-lockfile
+      - uses: dtolnay/rust-toolchain@1.80.0
+        with:
+          targets: aarch64-linux-android
+      - name: Cargo check
+        run: cargo check --workspace --exclude intent-example --all-targets --target aarch64-linux-android
