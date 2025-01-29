@@ -1,35 +1,43 @@
-use jni::{errors::Error, objects::JObject, JNIEnv};
+use jni::{
+    errors::Error,
+    objects::{JObject, JString, JValue},
+    JNIEnv,
+};
 
-struct Inner<'env> {
-    env: JNIEnv<'env>,
+struct Inner<'vm, 'env> {
+    env: &'vm mut JNIEnv<'env>,
     object: JObject<'env>,
 }
 
 /// A messaging object you can use to request an action from another android app component.
 #[must_use]
-pub struct Intent<'env> {
-    inner: Result<Inner<'env>, Error>,
+pub struct Intent<'vm, 'env> {
+    inner: Result<Inner<'vm, 'env>, Error>,
 }
 
-impl<'env> Intent<'env> {
-    pub fn from_object(env: JNIEnv<'env>, object: JObject<'env>) -> Self {
+impl<'vm, 'env> Intent<'vm, 'env> {
+    pub fn from_object(env: &'vm mut JNIEnv<'env>, object: JObject<'env>) -> Self {
         Self {
             inner: Ok(Inner { env, object }),
         }
     }
 
-    fn from_fn(f: impl FnOnce() -> Result<Inner<'env>, Error>) -> Self {
+    fn from_fn(f: impl FnOnce() -> Result<Inner<'vm, 'env>, Error>) -> Self {
         let inner = f();
         Self { inner }
     }
 
-    pub fn new(env: JNIEnv<'env>, action: impl AsRef<str>) -> Self {
+    pub fn new(env: &'vm mut JNIEnv<'env>, action: impl AsRef<str>) -> Self {
         Self::from_fn(|| {
             let intent_class = env.find_class("android/content/Intent")?;
             let action_view =
-                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
+                env.get_static_field(&intent_class, action.as_ref(), "Ljava/lang/String;")?;
 
-            let intent = env.new_object(intent_class, "(Ljava/lang/String;)V", &[action_view])?;
+            let intent = env.new_object(
+                &intent_class,
+                "(Ljava/lang/String;)V",
+                &[action_view.borrow()],
+            )?;
 
             Ok(Inner {
                 env,
@@ -38,7 +46,11 @@ impl<'env> Intent<'env> {
         })
     }
 
-    pub fn new_with_uri(env: JNIEnv<'env>, action: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
+    pub fn new_with_uri(
+        env: &'env mut JNIEnv<'env>,
+        action: impl AsRef<str>,
+        uri: impl AsRef<str>,
+    ) -> Self {
         Self::from_fn(|| {
             let url_string = env.new_string(uri)?;
             let uri_class = env.find_class("android/net/Uri")?;
@@ -46,17 +58,18 @@ impl<'env> Intent<'env> {
                 uri_class,
                 "parse",
                 "(Ljava/lang/String;)Landroid/net/Uri;",
-                &[url_string.into()],
+                &[JValue::Object(&url_string)],
             )?;
 
             let intent_class = env.find_class("android/content/Intent")?;
-            let action_view =
-                env.get_static_field(intent_class, action.as_ref(), "Ljava/lang/String;")?;
+            let action_view = env
+                .get_static_field(&intent_class, action.as_ref(), "Ljava/lang/String;")?
+                .l()?;
 
             let intent = env.new_object(
-                intent_class,
+                &intent_class,
                 "(Ljava/lang/String;Landroid/net/Uri;)V",
-                &[action_view, uri],
+                &[JValue::Object(&action_view), uri.borrow()],
             )?;
 
             Ok(Inner {
@@ -85,10 +98,10 @@ impl<'env> Intent<'env> {
             let class_name = inner.env.new_string(class_name)?;
 
             inner.env.call_method(
-                inner.object,
+                &inner.object,
                 "setClassName",
                 "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
-                &[package_name.into(), class_name.into()],
+                &[JValue::Object(&package_name), JValue::Object(&class_name)],
             )?;
 
             Ok(inner)
@@ -110,10 +123,10 @@ impl<'env> Intent<'env> {
             let value = inner.env.new_string(value)?;
 
             inner.env.call_method(
-                inner.object,
+                &inner.object,
                 "putExtra",
                 "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
-                &[key.into(), value.into()],
+                &[JValue::Object(&key), JValue::Object(&value)],
             )?;
 
             Ok(inner)
@@ -136,10 +149,9 @@ impl<'env> Intent<'env> {
     pub fn into_chooser_with_title(self, title: Option<impl AsRef<str>>) -> Self {
         self.and_then(|mut inner| {
             let title_value = if let Some(title) = title {
-                let s = inner.env.new_string(title)?;
-                s.into()
+                inner.env.new_string(title)?
             } else {
-                JObject::null().into()
+                JString::default()
             };
 
             let intent_class = inner.env.find_class("android/content/Intent")?;
@@ -147,7 +159,7 @@ impl<'env> Intent<'env> {
                 intent_class,
                 "createChooser",
                 "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;",
-                &[inner.object.into(), title_value],
+                &[JValue::Object(&inner.object), JValue::Object(&title_value)],
             )?;
 
             inner.object = intent.try_into()?;
@@ -169,10 +181,10 @@ impl<'env> Intent<'env> {
             let jstring = inner.env.new_string(type_name)?;
 
             inner.env.call_method(
-                inner.object,
+                &inner.object,
                 "setType",
                 "(Ljava/lang/String;)Landroid/content/Intent;",
-                &[jstring.into()],
+                &[JValue::Object(&jstring)],
             )?;
 
             Ok(inner)
@@ -188,14 +200,17 @@ impl<'env> Intent<'env> {
                 activity,
                 "startActivity",
                 "(Landroid/content/Intent;)V",
-                &[inner.object.into()],
+                &[JValue::Object(&inner.object)],
             )?;
 
             Ok(())
         })
     }
 
-    fn and_then(mut self, f: impl FnOnce(Inner) -> Result<Inner, Error>) -> Self {
+    fn and_then(
+        mut self,
+        f: impl FnOnce(Inner<'vm, 'env>) -> Result<Inner<'vm, 'env>, Error>,
+    ) -> Self {
         self.inner = self.inner.and_then(f);
         self
     }
