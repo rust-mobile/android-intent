@@ -1,28 +1,76 @@
 use jni::{
-    errors::Error,
+    errors::Result,
     objects::{JObject, JString, JValue},
     JNIEnv,
 };
 
-struct Inner<'vm, 'env> {
+/// A messaging object you can use to request an action from another android app component.
+#[must_use]
+pub struct Intent<'vm, 'env> {
     env: &'vm mut JNIEnv<'env>,
     object: JObject<'env>,
 }
 
-/// A messaging object you can use to request an action from another android app component.
-#[must_use]
-pub struct Intent<'vm, 'env> {
-    inner: Result<Inner<'vm, 'env>, Error>,
-}
-
 impl<'vm, 'env> Intent<'vm, 'env> {
     pub fn from_object(env: &'vm mut JNIEnv<'env>, object: JObject<'env>) -> Self {
+        Self { env, object }
+    }
+
+    // TODO: Could also return a borrowed JavaStr so that the caller decides if they just want to read or also allocate
+    pub fn action(&mut self) -> Result<String> {
+        let action = self
+            .env
+            .call_method(&self.object, "getAction", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
+
+        let action = self.env.get_string(&action)?;
+        Ok(action.into())
+    }
+
+    pub fn data_string(&mut self) -> Result<String> {
+        let data_string = self
+            .env
+            .call_method(&self.object, "getDataString", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
+        let data_string = self.env.get_string(&data_string)?;
+        Ok(data_string.into())
+    }
+
+    /// <https://developer.android.com/reference/android/content/Intent#getStringExtra(java.lang.String)>
+    pub fn string_extra(&mut self, name: &str) -> Result<String> {
+        let name = self.env.new_string(name)?;
+
+        let extra = self
+            .env
+            .call_method(
+                &self.object,
+                "getStringExtra",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&name.into())],
+            )?
+            .l()?
+            .into();
+        let extra = self.env.get_string(&extra)?;
+        Ok(extra.into())
+    }
+}
+
+/// A messaging object you can use to request an action from another Android app component.
+#[must_use]
+pub struct IntentBuilder<'vm, 'env> {
+    inner: Result<Intent<'vm, 'env>>,
+}
+
+impl<'vm, 'env> IntentBuilder<'vm, 'env> {
+    pub fn from_object(env: &'vm mut JNIEnv<'env>, object: JObject<'env>) -> Self {
         Self {
-            inner: Ok(Inner { env, object }),
+            inner: Ok(Intent::from_object(env, object)),
         }
     }
 
-    fn from_fn(f: impl FnOnce() -> Result<Inner<'vm, 'env>, Error>) -> Self {
+    fn from_fn(f: impl FnOnce() -> Result<Intent<'vm, 'env>>) -> Self {
         let inner = f();
         Self { inner }
     }
@@ -39,10 +87,7 @@ impl<'vm, 'env> Intent<'vm, 'env> {
                 &[action_view.borrow()],
             )?;
 
-            Ok(Inner {
-                env,
-                object: intent,
-            })
+            Ok(Intent::from_object(env, intent))
         })
     }
 
@@ -72,7 +117,7 @@ impl<'vm, 'env> Intent<'vm, 'env> {
                 &[JValue::Object(&action_view), uri.borrow()],
             )?;
 
-            Ok(Inner {
+            Ok(Intent {
                 env,
                 object: intent,
             })
@@ -81,10 +126,10 @@ impl<'vm, 'env> Intent<'vm, 'env> {
 
     /// Set the class name for the intent target.
     /// ```no_run
-    /// use android_intent::{Action, Extra, Intent};
+    /// use android_intent::{Action, Extra, IntentBuilder};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send)
+    /// let intent = IntentBuilder::new(env, Action::Send)
     ///     .set_class_name("com.excample", "IntentTarget");
     /// # })
     /// ```
@@ -110,10 +155,10 @@ impl<'vm, 'env> Intent<'vm, 'env> {
 
     /// Add extended data to the intent.
     /// ```no_run
-    /// use android_intent::{Action, Extra, Intent};
+    /// use android_intent::{Action, Extra, IntentBuilder};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send)
+    /// let intent = IntentBuilder::new(env, Action::Send)
     ///     .with_extra(Extra::Text, "Hello World!");
     /// # })
     /// ```
@@ -135,10 +180,10 @@ impl<'vm, 'env> Intent<'vm, 'env> {
 
     /// Builds a new [`super::Action::Chooser`] Intent that wraps the given target intent.
     /// ```no_run
-    /// use android_intent::{Action, Intent};
+    /// use android_intent::{Action, IntentBuilder};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send)
+    /// let intent = IntentBuilder::new(env, Action::Send)
     ///     .into_chooser();
     /// # })
     /// ```
@@ -169,10 +214,10 @@ impl<'vm, 'env> Intent<'vm, 'env> {
 
     /// Set an explicit MIME data type.
     /// ```no_run
-    /// use android_intent::{Action, Intent};
+    /// use android_intent::{Action, IntentBuilder};
     ///
     /// # android_intent::with_current_env(|env| {
-    /// let intent = Intent::new(env, Action::Send)
+    /// let intent = IntentBuilder::new(env, Action::Send)
     ///     .with_type("text/plain");
     /// # })
     /// ```
@@ -191,7 +236,7 @@ impl<'vm, 'env> Intent<'vm, 'env> {
         })
     }
 
-    pub fn start_activity(self) -> Result<(), Error> {
+    pub fn start_activity(self) -> Result<()> {
         let cx = ndk_context::android_context();
         let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
@@ -207,10 +252,7 @@ impl<'vm, 'env> Intent<'vm, 'env> {
         })
     }
 
-    fn and_then(
-        mut self,
-        f: impl FnOnce(Inner<'vm, 'env>) -> Result<Inner<'vm, 'env>, Error>,
-    ) -> Self {
+    fn and_then(mut self, f: impl FnOnce(Intent<'vm, 'env>) -> Result<Intent<'vm, 'env>>) -> Self {
         self.inner = self.inner.and_then(f);
         self
     }
