@@ -85,7 +85,7 @@ impl<'vm, 'env> Intent<'vm, 'env> {
     ///
     /// # android_intent::with_current_env(|env| {
     /// let intent = Intent::new(env, Action::Send)
-    ///     .set_class_name("com.excample", "IntentTarget");
+    ///     .set_class_name("com.example", "IntentTarget");
     /// # })
     /// ```
     pub fn set_class_name(
@@ -191,9 +191,23 @@ impl<'vm, 'env> Intent<'vm, 'env> {
         })
     }
 
-    pub fn start_activity(self) -> Result<(), Error> {
-        let cx = ndk_context::android_context();
-        let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
+    pub fn add_flags(self, flags: i32) -> Self {
+        self.and_then(|inner| {
+            inner.env.call_method(
+                &inner.object,
+                "addFlags",
+                "(I)Landroid/content/Intent;",
+                &[JValue::Int(flags)],
+            )?;
+
+            Ok(inner)
+        })
+    }
+
+    pub fn start_activity(self, activity: JObject) -> Result<(), Error> {
+        // let cx = ndk_context::android_context();
+        // let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
+        // let activity = unsafe { JObject::from_raw(cx.context() as jni::sys::jobject) };
 
         self.inner.and_then(|inner| {
             inner.env.call_method(
